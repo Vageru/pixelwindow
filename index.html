@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="uk"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Піксельне вікно</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Pixelify+Sans:400,600|VT323">
+<style>
+/* webOS 3.x (old Chromium): no clamp/min/max/env/gap/grid */
+[hidden]{display:none!important}
+html,body{height:100%;margin:0}
+body{background:#0b1026;color:#f5ecd8;overflow:hidden;font-family:'VT323','Courier New',monospace;font-size:20px}
+#app{position:fixed;top:0;left:0;right:0;bottom:0}
+#screen{position:absolute;top:0;left:0;width:100%;height:100%;display:block}
+.hudtop{position:absolute;left:0;right:0;top:3vh;padding:0 5vw;display:-webkit-flex;display:flex;-webkit-justify-content:space-between;justify-content:space-between;-webkit-align-items:flex-start;align-items:flex-start;text-shadow:3px 3px 0 rgba(0,0,0,.55);pointer-events:none}
+.clock{font-family:'Pixelify Sans','VT323',monospace;font-weight:600;font-size:12vw;line-height:.9;letter-spacing:.02em}
+.clock .dim{opacity:.25}
+.mini .clock{font-size:4.6vw}
+.mini .date{font-size:1.9vw}
+#cAnalog{width:21vw;height:21vw;display:block}
+.flip{display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;font-family:'Pixelify Sans','VT323',monospace;font-weight:600;font-size:9vw}
+.tile{position:relative;width:.72em;margin-right:.08em;text-align:center;line-height:1.18;background:#141428;border:3px solid #3d3866;text-shadow:none}
+.tile:after{content:"";position:absolute;left:0;right:0;top:50%;height:3px;background:rgba(0,0,0,.55)}
+.tile.go{-webkit-animation:flip .32s steps(4);animation:flip .32s steps(4)}
+.flip .sep{width:.3em;margin-right:.08em;text-align:center}
+@-webkit-keyframes flip{0%{-webkit-transform:scaleY(1)}50%{-webkit-transform:scaleY(.06)}100%{-webkit-transform:scaleY(1)}}
+@keyframes flip{0%{transform:scaleY(1)}50%{transform:scaleY(.06)}100%{transform:scaleY(1)}}
+.date{font-size:2.6vw;color:#c4bdd6;margin-top:.35em}
+.weather{text-align:right}
+.temp{font-family:'Pixelify Sans','VT323',monospace;font-weight:600;font-size:6.6vw;line-height:.95}
+.wdesc{font-size:2.4vw}
+.wplace{font-size:1.6vw;color:#c4bdd6}
+.barwrap{position:absolute;left:0;right:0;bottom:3vh;padding:0 5vw;-webkit-transition:opacity .7s;transition:opacity .7s}
+.barwrap.hide{opacity:0}
+.bar{display:-webkit-flex;display:flex;-webkit-flex-wrap:wrap;flex-wrap:wrap;-webkit-align-items:center;align-items:center;background:rgba(9,10,24,.74);border:2px solid #3d3866;padding:.5vw 1vw;font-size:1.8vw}
+.bar > *{margin-right:1vw}
+.theme{display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center}
+.theme > *{margin-right:.6vw}
+#themeName{min-width:8.5em;text-align:center}
+button{font:inherit;color:#f5ecd8;background:transparent;border:2px solid #3d3866;padding:1px 10px;line-height:1.2}
+button.on{border-color:#ffcf6b;color:#ffcf6b}
+.keys{color:#c4bdd6;margin-left:auto}
+.menuwrap{position:absolute;top:3vh;right:5vw;bottom:17vh;width:42vw}
+.menu{background:rgba(9,10,24,.84);border:2px solid #3d3866;padding:1vw 1.2vw;font-size:1.6vw;max-height:100%;overflow-y:auto;box-sizing:border-box}
+.menu h2{font-family:'Pixelify Sans','VT323',monospace;font-weight:600;font-size:1.25em;margin:0 0 4px}
+.menu .hint{color:#c4bdd6;margin:0 0 .6vw;font-size:.85em}
+.menu .group{color:#c4bdd6;font-size:.8em;letter-spacing:.08em;text-transform:uppercase;margin:.6vw 6px 2px}
+.row{display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;padding:2px 6px;border:2px solid transparent}
+.row.focus{border-color:#ffcf6b}
+.row > span:first-child{width:1.3em;-webkit-flex:none;flex:none}
+.row .dot{display:inline-block;width:.7em;height:.7em;border:2px solid #c4bdd6;box-sizing:border-box}
+.row.active .dot{background:#ffcf6b;border-color:#ffcf6b}
+.row.active .label{color:#ffcf6b}
+.row .label{-webkit-flex:1;flex:1;min-width:0}
+.row .sub{display:block;color:#c4bdd6;font-size:.8em}
+.row.child{padding-left:2em}
+.vol,.pick{display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center}
+.vol > *,.pick > *{margin-left:6px}
+.vol button,.pick button{padding:0 7px}
+.pick span{min-width:7em;text-align:center}
+.meter{display:-webkit-flex;display:flex}
+.meter i{display:block;width:6px;height:14px;margin-right:2px;background:#3d3866}
+.meter i.f{background:#f5ecd8}
+
+#fs{display:none}
+.menu #srcNote{margin:.6vw 0 0}
+</style></head><body>
+<div id="app">
+  <canvas id="screen"></canvas>
+  <div class="hudtop">
+    <div id="clockwrap">
+      <div class="clock" id="cDigital"><span id="hh">18</span><span id="colon">:</span><span id="mm">30</span></div>
+      <canvas id="cAnalog" width="280" height="280" hidden></canvas>
+      <div class="flip" id="cFlip" hidden><span class="tile" id="f0">1</span><span class="tile" id="f1">8</span><span class="sep">:</span><span class="tile" id="f2">3</span><span class="tile" id="f3">0</span></div>
+      <div class="date" id="date">вівторок, 17 листопада</div>
+    </div>
+    <div class="weather">
+      <div class="temp" id="temp">−2°</div>
+      <div class="wdesc" id="wdesc">легкий сніг</div>
+      <div class="wplace" id="wplace">Вінниця · приклад погоди</div>
+    </div>
+  </div>
+  <div class="menuwrap" id="menuwrap" hidden>
+    <div class="menu" role="dialog" aria-label="Звуки">
+      <h2>Звуки</h2>
+      <p class="hint">Пульт: ▲▼ вибір · ◀▶ гучність або стиль · OK увімк./вимк. · «Назад» закрити</p>
+      <div id="rows"></div>
+      <p class="hint" id="srcNote" hidden></p>
+    </div>
+  </div>
+  <div class="barwrap" id="barwrap">
+    <div class="bar">
+      <div class="theme">
+        <button id="prev" aria-label="Попередня сцена">◀</button>
+        <span id="themeName">Вечірня Вінниця</span>
+        <button id="next" aria-label="Наступна сцена">▶</button>
+      </div>
+      <button id="soundsBtn">♪ Звуки</button>
+      <button id="clockBtn">Годинник: піксельний</button>
+      <button id="lightBtn">Світло: авто</button>
+      <button id="fs">На весь екран</button>
+      <span class="keys">Пульт: ◀ ▶ сцена · ▲ звуки · ▼ годинник · OK музика · червона — світло</span>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+'use strict';
+var W=192,H=108;
+var screen=document.getElementById('screen');
+var sctx=screen.getContext('2d');
+var buf=document.createElement('canvas');buf.width=W;buf.height=H;
+var b=buf.getContext('2d');
+function $(id){return document.getElementById(id);}
+function mk(){var c=document.createElement('canvas');c.width=W;c.height=H;return c;}
+function rect(g,x,y,w,h,c){g.fillStyle=c;g.fillRect(x|0,y|0,w|0,h|0);}
+function px(g,x,y,c){g.fillStyle=c;g.fillRect(x|0,y|0,1,1);}
+function circle(g,cx,cy,r,c){for(var y=-r;y<=r;y++)for(var x=-r;x<=r;x++)if(x*x+y*y<=r*r)px(g,cx+x,cy+y,c);}
+function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;var t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function load(k,def){try{var v=localStorage.getItem(k);return v===null?def:JSON.parse(v);}catch(e){return def;}}
+function save(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
+
+var weather={temp:-2,desc:'легкий сніг',precip:'snow',live:false};
+var fx={flash:0,puff:0};
+
+/* =================== SKY: light follows the real sun over Vinnytsia =================== */
+var Sky=(function(){
+  var LAT=49.23,LON=28.47,rad=Math.PI/180;
+  var P={
+    N:['#0b1026','#10183a','#17204a','#202a5a','#2c3468'],
+    BLUE:['#151d48','#222c64','#34407e','#4f5592','#7a6a9a'],
+    SUNSET:['#283672','#4a5596','#93679a','#e0866a','#f6b86a'],
+    DAWN:['#2b3a7a','#56609e','#a97aa8','#ee9fa0','#f8cba4'],
+    GOLD:['#3f78c0','#5f93d0','#86ade0','#c0c8d8','#f2d6a8'],
+    MORN:['#4682cc','#68a0dc','#8fbae6','#b9d3ee','#e6e4dc'],
+    DAY:['#3a82d6','#5799e0','#78afe8','#99c4ee','#bfdbf4']
+  };
+  var K=[
+    {e:-90,pm:P.N,am:P.N,s:1,tc:'#5866b0',ta:0,w:1,l:1},
+    {e:-12,pm:P.N,am:P.N,s:1,tc:'#5866b0',ta:0,w:1,l:1},
+    {e:-6,pm:P.BLUE,am:P.BLUE,s:.45,tc:'#5866b0',ta:.06,w:.9,l:1},
+    {e:-1,pm:P.SUNSET,am:P.DAWN,s:0,tc:'#ff9a6a',ta:.12,w:.6,l:.7},
+    {e:6,pm:P.GOLD,am:P.MORN,s:0,tc:'#ffd8b0',ta:.22,w:.1,l:0},
+    {e:12,pm:P.DAY,am:P.DAY,s:0,tc:'#d2e6ff',ta:.3,w:0,l:0},
+    {e:20,pm:P.DAY,am:P.DAY,s:0,tc:'#d2e6ff',ta:.32,w:0,l:0},
+    {e:91,pm:P.DAY,am:P.DAY,s:0,tc:'#d2e6ff',ta:.32,w:0,l:0}
+  ];
+  var MODES=[{id:'auto',name:'авто'},{id:'dawn',name:'ранок',el:1,ha:-1.35},{id:'day',name:'день',el:24,ha:-.25},{id:'dusk',name:'захід',el:-1,ha:1.35},{id:'night',name:'ніч',el:-30,ha:3}];
+  var mode=load('pixeltv-light',0);if(!(mode>=0&&mode<MODES.length))mode=0;
+  function hx(c){return[parseInt(c.substr(1,2),16),parseInt(c.substr(3,2),16),parseInt(c.substr(5,2),16)];}
+  function mix(a,c,f){var x=hx(a),y=hx(c),o='#',k,v;for(k=0;k<3;k++){v=Math.round(x[k]+(y[k]-x[k])*f).toString(16);o+=v.length<2?'0'+v:v;}return o;}
+  function sun(d){
+    var n=d.getTime()/86400000+2440587.5-2451545.0;
+    var L=(280.460+0.9856474*n)%360,g=((357.528+0.9856003*n)%360)*rad;
+    var lam=(L+1.915*Math.sin(g)+0.020*Math.sin(2*g))*rad,eps=(23.439-0.0000004*n)*rad;
+    var dec=Math.asin(Math.sin(eps)*Math.sin(lam)),ra=Math.atan2(Math.cos(eps)*Math.sin(lam),Math.cos(lam));
+    var gmst=(280.46061837+360.98564736629*n)%360,ha=(gmst+LON)*rad-ra;
+    var el=Math.asin(Math.sin(LAT*rad)*Math.sin(dec)+Math.cos(LAT*rad)*Math.cos(dec)*Math.cos(ha))/rad;
+    return{el:el,ha:ha};
+  }
+  var S={};
+  function update(){
+    var el,ha,m=MODES[mode];
+    if(m.id==='auto'){var r=sun(new Date());el=r.el;ha=r.ha;}else{el=m.el;ha=m.ha;}
+    var am=Math.sin(ha)<0,k=0;while(k<K.length-2&&el>=K[k+1].e)k++;
+    var A=K[k],B=K[k+1],f=Math.max(0,Math.min(1,(el-A.e)/(B.e-A.e))),pa=am?A.am:A.pm,pb=am?B.am:B.pm,i;
+    S.pal=[];for(i=0;i<5;i++)S.pal.push(mix(pa[i],pb[i],f));
+    S.stars=A.s+(B.s-A.s)*f;S.tc=mix(A.tc,B.tc,f);S.ta=A.ta+(B.ta-A.ta)*f;S.win=A.w+(B.w-A.w)*f;S.lamps=A.l+(B.l-A.l)*f;
+    S.el=el;var hn=Math.atan2(Math.sin(ha),Math.cos(ha));S.sunX=96+hn/(Math.PI/2)*80;S.sunY=74-el*1.9;
+    S.day=Math.max(0,Math.min(1,(el+4)/14));S.key=S.pal.join('')+S.tc+S.ta.toFixed(2);
+  }
+  update();setInterval(update,30000);
+  S.drawSky=function(g,x0,y0,w,h){var bh=h/5,i,x,yy;
+    for(i=0;i<5;i++){yy=y0+Math.round(i*bh);rect(g,x0,yy,w,Math.ceil(bh)+1,S.pal[i]);
+      if(i>0)for(x=x0;x<x0+w;x+=2){px(g,x,yy,S.pal[i-1]);px(g,x+1,yy+1,S.pal[i-1]);}}};
+  S.drawSun=function(g){
+    if(S.el>-4){var cy=Math.max(9,S.sunY),c=S.el<4?'#ffb070':'#fff1b8';
+      if(S.el>2){g.globalAlpha=.25;circle(g,S.sunX,cy,8,'#fff6d0');g.globalAlpha=1;}
+      circle(g,S.sunX,cy,5,c);}
+    var ma=Math.max(0,Math.min(1,(-S.el-3)/6));
+    if(ma>0){g.globalAlpha=ma;circle(g,156,18,7,'#f1e4b3');px(g,153,16,'#d9c98f');px(g,154,16,'#d9c98f');px(g,158,21,'#d9c98f');px(g,159,15,'#d9c98f');g.globalAlpha=1;}
+  };
+  S.tinted=function(layer,cache){
+    if(cache.key!==S.key){if(!cache.c)cache.c=mk();var g=cache.c.getContext('2d');g.clearRect(0,0,W,H);g.drawImage(layer,0,0);
+      if(S.ta>0){g.globalCompositeOperation='source-atop';g.globalAlpha=S.ta;g.fillStyle=S.tc;g.fillRect(0,0,W,H);g.globalAlpha=1;g.globalCompositeOperation='source-over';}
+      cache.key=S.key;}
+    return cache.c;
+  };
+  S.setMode=function(i){mode=(i+MODES.length)%MODES.length;save('pixeltv-light',mode);update();};
+  S.modeName=function(){return MODES[mode].name;};
+  return S;
+})();
+
+/* =================== GENERATED MUSIC: 4 styles =================== */
+var STATIONS=[{id:'lofi',name:'Спокійний lo-fi'},{id:'jazz',name:'Нічний джаз'},{id:'ambient',name:'Ембієнт'},{id:'chip',name:'8-біт'}];
+var Music=(function(){
+  var ctx,out,filt,crk,noise,send,timer=null,nextTime=0,step=0,station=load('pixeltv-station',0);
+  if(!(station>=0&&station<STATIONS.length))station=0;
+  function mtof(m){return 440*Math.pow(2,(m-69)/12);}
+  function env(g,t,p,a,d){g.gain.setValueAtTime(.0001,t);g.gain.linearRampToValueAtTime(p,t+a);g.gain.exponentialRampToValueAtTime(.0001,t+d);}
+  function osc(type,m,t,d,v,a,dest,det){var o=ctx.createOscillator(),g=ctx.createGain();o.type=type;o.frequency.value=mtof(m)*(det||1);o.connect(g);g.connect(dest||filt);env(g,t,v,a||.012,d);o.start(t);o.stop(t+d+.05);return g;}
+  function keys(m,t,d,v){var g=osc('sine',m,t,d,v);var g2=osc('triangle',m+12,t,d,v*.18,.012,filt,1.003);return g;}
+  function nz(t,type,f,v,d,dest){var s=ctx.createBufferSource(),fl=ctx.createBiquadFilter(),g=ctx.createGain();s.buffer=noise;fl.type=type;fl.frequency.value=f;s.connect(fl);fl.connect(g);g.connect(dest||out);env(g,t,v,.004,d);s.start(t,Math.random()*.5);s.stop(t+d+.05);}
+  function kick(t,v){var o=ctx.createOscillator(),g=ctx.createGain();o.frequency.setValueAtTime(120,t);o.frequency.exponentialRampToValueAtTime(42,t+.12);o.connect(g);g.connect(out);env(g,t,v||.55,.005,.26);o.start(t);o.stop(t+.3);}
+  function pick(a){return a[(Math.random()*a.length)|0];}
+  var ST={
+    lofi:{sd:60/72/2,play:function(s,t,sd){
+      var CH=[[55,58,62,65],[52,55,58,62],[53,57,60,64],[50,53,57,60]],BS=[43,48,41,38];
+      var bar=Math.floor(s/8)%4,pos=s%8,tt=t+(pos%2?sd*.2:0),i;
+      if(pos===0){for(i=0;i<4;i++)keys(CH[bar][i],tt,sd*7,.06);osc('sine',BS[bar],tt,sd*3.5,.32);}
+      if(pos===5)osc('sine',BS[bar]+7,tt,sd*2,.32);
+      if(pos===6&&Math.random()<.45)for(i=1;i<4;i++)keys(CH[bar][i],tt,sd*2,.035);
+      if(pos===0||pos===4||(pos===7&&Math.random()<.25))kick(tt);
+      if(pos===2||pos===6)nz(tt,'bandpass',1800,.11,.16);
+      nz(tt,'highpass',7000,pos%2?.018:.032,.045);
+      if((pos===1||pos===3||pos===4||pos===7)&&Math.random()<.32)keys(pick([65,67,69,72,74,77,79]),tt,sd*2.5,.05);
+    }},
+    jazz:{sd:60/96/2,play:function(s,t,sd){
+      var CH=[[53,57,60,64],[53,57,59,64],[52,55,59,62],[55,58,61,64]],BS=[38,43,36,45];
+      var bar=Math.floor(s/8)%4,pos=s%8,tt=t+(pos%2?sd*.33:0),nb=BS[(bar+1)%4],i;
+      if(pos%2===0){var q=pos/2,n=q===0?BS[bar]:q===1?BS[bar]+pick([3,4,5]):q===2?BS[bar]+7:nb+pick([-1,1]);
+        osc('triangle',n,tt,sd*1.6,.3);osc('sine',n,tt,sd*1.6,.18);}
+      if(pos===0||pos===2||pos===3||pos===4||pos===6||pos===7)nz(tt,'highpass',6500,pos===3||pos===7?.022:.034,.28);
+      if(pos===2||pos===6)nz(tt,'bandpass',2600,.05,.22);
+      if((pos===3||pos===5||(pos===0&&Math.random()<.4))&&Math.random()<.7)for(i=0;i<4;i++)keys(CH[bar][i],tt,sd*1.3,.045);
+      if(pos%2===1&&Math.random()<.3){var g=keys(pick([62,65,67,69,72,74,76]),tt,sd*2,.05);}
+    }},
+    ambient:{sd:60/50/2,play:function(s,t,sd){
+      var CH=[[53,57,60,64,67],[57,60,64,67],[58,62,65,69],[60,65,67,72]];
+      var ch=Math.floor(s/16)%4,pos=s%16,i;
+      if(pos===0){var d=sd*16+2.5;
+        for(i=0;i<CH[ch].length;i++){var g1=osc('sawtooth',CH[ch][i],t,d,.022,2.2,pad),g2=osc('sawtooth',CH[ch][i],t,d,.022,2.2,pad,1.006);}
+        osc('sine',CH[ch][0]-24,t,d,.16,2.5);}
+      if(Math.random()<.2){var m=pick([72,74,76,79,81,84]);osc('sine',m,t,3,.05,.01,send);osc('sine',m+12,t,1.5,.012,.01,send);}
+    }},
+    chip:{sd:60/116/4,play:function(s,t,sd){
+      var CH=[[57,60,64],[53,57,60],[60,64,67],[55,59,62]];
+      var bar=Math.floor(s/16)%4,pos=s%16,c=CH[bar];
+      osc('square',c[pos%3]+12*((pos>>2)%2)+12,t,sd*.9,.022,.002);
+      if(pos%4===0)osc('triangle',c[0]-12,t,sd*3,.22,.004);
+      if(pos%4===2)osc('triangle',c[0]-12+7,t,sd*1.5,.18,.004);
+      if(pos===0||pos===8||(pos===10&&Math.random()<.5)){var o=ctx.createOscillator(),g=ctx.createGain();o.type='triangle';o.frequency.setValueAtTime(160,t);o.frequency.exponentialRampToValueAtTime(50,t+.1);o.connect(g);g.connect(out);env(g,t,.4,.003,.14);o.start(t);o.stop(t+.2);}
+      if(pos===4||pos===12)nz(t,'bandpass',2200,.1,.1);
+      if(pos%2===1)nz(t,'highpass',8000,.02,.03);
+      if(pos%4===0&&Math.random()<.45)osc('square',pick([69,72,74,76,79,81]),t,sd*3.5,.03,.002,send);
+    }}
+  };
+  var pad;
+  function init(c,dest){
+    ctx=c;out=dest;filt=ctx.createBiquadFilter();filt.type='lowpass';filt.frequency.value=2100;filt.connect(out);
+    pad=ctx.createBiquadFilter();pad.type='lowpass';pad.frequency.value=900;pad.connect(out);
+    var dl=ctx.createDelay(1),fb=ctx.createGain(),lp=ctx.createBiquadFilter(),wet=ctx.createGain();
+    dl.delayTime.value=.42;fb.gain.value=.42;lp.type='lowpass';lp.frequency.value=1700;wet.gain.value=.5;
+    send=ctx.createGain();send.connect(dl);send.connect(out);dl.connect(lp);lp.connect(fb);fb.connect(dl);lp.connect(wet);wet.connect(out);
+    pad.connect(send);
+    noise=ctx.createBuffer(1,ctx.sampleRate,ctx.sampleRate);var d=noise.getChannelData(0),i;for(i=0;i<d.length;i++)d[i]=Math.random()*2-1;
+    var cb=ctx.createBuffer(1,ctx.sampleRate*2,ctx.sampleRate),cd=cb.getChannelData(0);
+    for(i=0;i<cd.length;i++)cd[i]=Math.random()<.0006?(Math.random()*2-1):(Math.random()*2-1)*.012;
+    var cs=ctx.createBufferSource();cs.buffer=cb;cs.loop=true;var hp=ctx.createBiquadFilter();hp.type='highpass';hp.frequency.value=900;
+    crk=ctx.createGain();crk.gain.value=0;cs.connect(hp);hp.connect(crk);crk.connect(out);cs.start(0);
+  }
+  function sched(){var S=ST[STATIONS[station].id];while(nextTime<ctx.currentTime+.2){S.play(step,nextTime,S.sd);nextTime+=S.sd;step++;}}
+  function run(){clearInterval(timer);nextTime=ctx.currentTime+.1;step=0;timer=setInterval(sched,40);
+    crk.gain.value=STATIONS[station].id==='lofi'||STATIONS[station].id==='jazz'?.05:0;}
+  return{
+    start:function(c,dest){if(!ctx)init(c,dest);if(!timer)run();},
+    stop:function(){clearInterval(timer);timer=null;if(crk)crk.gain.value=0;},
+    station:function(){return station;},
+    setStation:function(i){station=(i+STATIONS.length)%STATIONS.length;save('pixeltv-station',station);if(timer)run();}
+  };
+})();
+
+/* =================== SOUND ENGINE (ambience is synthesized, no files) =================== */
+var Snd=(function(){
+  var DEFS=[
+    {id:'music',name:'Генерована музика'},
+    {id:'fire',name:'Тріск вогнища'},
+    {id:'rain',name:'Шум дощу'},
+    {id:'storm',name:'Гроза'},
+    {id:'city',name:'Місто: авто, сигнали, трамвай'},
+    {id:'wind',name:'Вітер'},
+    {id:'crickets',name:'Цвіркуни'},
+    {id:'purr',name:'Кіт муркоче'},
+    {id:'keys',name:'Клавіатура'},
+    {id:'hookah',name:'Кальян булькає'}
+  ];
+  var MULT={music:1,fire:1.1,rain:1,storm:1,city:.9,wind:.9,crickets:.7,purr:1.6,keys:.8,hookah:.9};
+  var st=load('pixeltv-sound',{}),i;
+  for(i=0;i<DEFS.length;i++){var d=DEFS[i];if(!st[d.id])st[d.id]={on:false,vol:.6};}
+  var ctx=null,master,white,brown,ch={},listeners={},hooks={};
+
+  function emit(n,delay){var f=listeners[n];if(!f)return;setTimeout(f,Math.max(0,delay*1000));}
+  function flt(type,f,q){var x=ctx.createBiquadFilter();x.type=type;x.frequency.value=f;if(q)x.Q.value=q;return x;}
+  function gain(v){var g=ctx.createGain();g.gain.value=v;return g;}
+  function chain(a){for(var k=0;k<a.length-1;k++)a[k].connect(a[k+1]);return a[a.length-1];}
+  function loop(bf){var s=ctx.createBufferSource();s.buffer=bf;s.loop=true;s.start(0);return s;}
+  function env(g,t,peak,att,dur){g.gain.setValueAtTime(.0001,t);g.gain.linearRampToValueAtTime(peak,t+att);g.gain.exponentialRampToValueAtTime(.0001,t+dur);}
+  function burst(dest,t,type,f,q,peak,dur,useBrown){
+    var s=ctx.createBufferSource(),g=ctx.createGain();s.buffer=useBrown?brown:white;
+    var fl=flt(type,f,q);chain([s,fl,g,dest]);env(g,t,peak,.004,dur);s.start(t,Math.random()*1.5);s.stop(t+dur+.05);
+  }
+  function tone(dest,t,type,f,peak,dur,f2){
+    var o=ctx.createOscillator(),g=ctx.createGain();o.type=type;o.frequency.setValueAtTime(f,t);
+    if(f2)o.frequency.exponentialRampToValueAtTime(f2,t+dur*.8);
+    chain([o,g,dest]);env(g,t,peak,.008,dur);o.start(t);o.stop(t+dur+.05);
+  }
+  function init(){
+    var AC=window.AudioContext||window.webkitAudioContext;if(!AC)return false;
+    ctx=new AC();master=gain(.9);master.connect(ctx.destination);
+    var n=ctx.sampleRate*2,k,last=0;
+    white=ctx.createBuffer(1,n,ctx.sampleRate);var wd=white.getChannelData(0);for(k=0;k<n;k++)wd[k]=Math.random()*2-1;
+    brown=ctx.createBuffer(1,n*2,ctx.sampleRate);var bd=brown.getChannelData(0);
+    for(k=0;k<n*2;k++){last=(last+.02*(Math.random()*2-1))/1.02;bd[k]=last*3.5;}
+    for(k=0;k<DEFS.length;k++){var id=DEFS[k].id;ch[id]={g:gain(0),started:false,next:0,n:0};ch[id].g.connect(master);}
+    setInterval(tick,50);
+    return true;
+  }
+  var BED={
+    fire:function(o){chain([loop(brown),flt('lowpass',450),gain(.55),o]);},
+    rain:function(o){chain([loop(white),flt('highpass',600),flt('lowpass',5200),gain(.28),o]);chain([loop(brown),flt('lowpass',800),gain(.45),o]);},
+    storm:function(o){chain([loop(white),flt('highpass',350),flt('lowpass',3400),gain(.38),o]);chain([loop(brown),flt('lowpass',500),gain(.6),o]);},
+    city:function(o){var g=gain(.55);chain([loop(brown),flt('lowpass',380),g,o]);var l=ctx.createOscillator();l.frequency.value=.07;chain([l,gain(.2),g.gain]);l.start(0);},
+    wind:function(o){var bp=flt('bandpass',500,.8),g=gain(.6);chain([loop(brown),bp,g,o]);
+      var l1=ctx.createOscillator();l1.frequency.value=.09;chain([l1,gain(260),bp.frequency]);l1.start(0);
+      var l2=ctx.createOscillator();l2.frequency.value=.045;chain([l2,gain(.35),g.gain]);l2.start(0);},
+    purr:function(o){var g1=gain(.5),g2=gain(.6);chain([loop(brown),flt('lowpass',230),g1,g2,o]);
+      var p=ctx.createOscillator();p.type='square';p.frequency.value=24;chain([p,gain(.5),g1.gain]);p.start(0);
+      var br=ctx.createOscillator();br.frequency.value=.33;chain([br,gain(.4),g2.gain]);br.start(0);}
+  };
+  var EV={
+    fire:function(c,t,o){burst(o,t,'bandpass',1400+Math.random()*4200,1.2,.15+Math.random()*.55,.012+Math.random()*.03);
+      if(Math.random()<.06)burst(o,t,'lowpass',260,0,.6,.09,true);
+      return Math.random()<.25?.02+Math.random()*.05:.08+Math.random()*.35;},
+    rain:function(c,t,o){burst(o,t,'bandpass',2500+Math.random()*4000,2,.04+Math.random()*.06,.015);return .02+Math.random()*.08;},
+    storm:function(c,t,o){
+      if(c.n===0){c.n=1;return 4+Math.random()*6;}
+      burst(o,t,'highpass',1200,0,.45,.35);
+      var s=ctx.createBufferSource(),g=ctx.createGain(),lp=flt('lowpass',150);s.buffer=brown;chain([s,lp,g,o]);
+      env(g,t+.1,1.6,.35,5.5+Math.random()*2.5);s.start(t+.1);s.stop(t+9);
+      emit('thunder',t-ctx.currentTime);return 16+Math.random()*30;},
+    city:function(c,t,o){
+      var r=Math.random();
+      if(r<.6){var s=ctx.createBufferSource(),bp=flt('bandpass',300,1.2),g=ctx.createGain(),dur=2.2+Math.random()*1.6;
+        s.buffer=brown;chain([s,bp,g,o]);
+        bp.frequency.setValueAtTime(280,t);bp.frequency.linearRampToValueAtTime(720,t+dur*.5);bp.frequency.linearRampToValueAtTime(240,t+dur);
+        g.gain.setValueAtTime(.0001,t);g.gain.linearRampToValueAtTime(1.1,t+dur*.5);g.gain.linearRampToValueAtTime(.0001,t+dur);
+        s.start(t,Math.random());s.stop(t+dur+.1);}
+      else if(r<.85){var lp=flt('lowpass',1600);lp.connect(o);var f=330+Math.random()*120,hs=Math.random()<.5?2:1;
+        for(var k=0;k<hs;k++){tone(lp,t+k*.32,'square',f,.045,.24);tone(lp,t+k*.32,'square',f*1.26,.035,.24);}}
+      else{var lp2=flt('lowpass',3000);lp2.connect(o);tone(lp2,t,'sine',520,.06,.6);tone(lp2,t,'sine',1040,.02,.4);}
+      return 4+Math.random()*9;},
+    crickets:function(c,t,o){var f=4300+Math.random()*400,k;for(k=0;k<3;k++)tone(o,t+k*.055,'sine',f,.05,.035);return .7+Math.random()*.9;},
+    keys:function(c,t,o){
+      if(c.n<=0){c.n=5+(Math.random()*28|0);return 1.5+Math.random()*5;}
+      c.n--;burst(o,t,'highpass',2600,0,.13,.022);burst(o,t,'bandpass',650,1,.09,.03);
+      if(Math.random()<.06)burst(o,t+.01,'bandpass',420,1,.16,.05);
+      return .06+Math.random()*.14;},
+    hookah:function(c,t,o){
+      if(c.n<=0){c.n=18+(Math.random()*16|0);emit('hookah',t-ctx.currentTime);return 9+Math.random()*14;}
+      c.n--;var lp=flt('lowpass',1100);lp.connect(o);var f=170+Math.random()*190;tone(lp,t,'sine',f,.16,.08,f*1.9);
+      return .045+Math.random()*.08;}
+  };
+  function tick(){
+    var now=ctx.currentTime;
+    for(var id in EV){var c=ch[id];if(!st[id].on)continue;
+      if(c.next<now)c.next=now+.05;
+      var guard=0;while(c.next<now+.2&&guard++<20)c.next+=EV[id](c,c.next,c.g);}
+  }
+  function applyGain(id){
+    if(!ctx)return;var c=ch[id],v=st[id].on?st[id].vol*MULT[id]:0;
+    if(st[id].on&&!c.started){c.started=true;if(BED[id])BED[id](c.g);}
+    c.g.gain.setTargetAtTime(v,ctx.currentTime,.25);
+    if(id==='music'){if(st.music.on)Music.start(ctx,c.g);else Music.stop();}
+  }
+  function unlock(){
+    if(!ctx){if(!init())return;for(var k=0;k<DEFS.length;k++)applyGain(DEFS[k].id);}
+    if(ctx.state==='suspended'&&ctx.resume)ctx.resume();
+  }
+  function change(id){if(hooks[id])hooks[id](st[id]);}
+  return{
+    defs:DEFS,unlock:unlock,
+    isOn:function(id){return st[id].on;},
+    vol:function(id){return st[id].vol;},
+    toggle:function(id){unlock();st[id].on=!st[id].on;applyGain(id);save('pixeltv-sound',st);change(id);},
+    set:function(id,on){unlock();st[id].on=on;applyGain(id);save('pixeltv-sound',st);change(id);},
+    nudge:function(id,d){st[id].vol=Math.round(Math.max(0,Math.min(1,st[id].vol+d))*10)/10;applyGain(id);save('pixeltv-sound',st);change(id);},
+    on:function(n,f){listeners[n]=f;},
+    hook:function(id,f){hooks[id]=f;},
+    event:function(n){if(!ctx||n!=='tram'||!st.city.on)return;var t=ctx.currentTime+.05,lp=flt('lowpass',4000);lp.connect(ch.city.g);
+      tone(lp,t,'sine',1318,.11,1.1);tone(lp,t,'sine',1975,.04,.8);tone(lp,t+.42,'sine',1318,.11,1.1);tone(lp,t+.42,'sine',1975,.04,.8);}
+  };
+})();
+
+/* =================== ONLINE LO-FI RADIO =================== */
+var Stream=(function(){
+  var LIST=[
+    {name:'SomaFM Fluid',sub:'інструментальний хіп-хоп',url:'https://ice1.somafm.com/fluid-128-mp3'},
+    {name:'FluxFM Chillhop',sub:'lo-fi та chillhop',url:'https://streams.fluxfm.de/Chillhop/mp3-320/streams.fluxfm.de/'},
+    {name:'SomaFM Groove Salad',sub:'спокійний чіл',url:'https://ice1.somafm.com/groovesalad-128-mp3'}
+  ];
+  var a=null,on=false,http=false,status='',idx=load('pixeltv-stream',0),onChange=function(){};
+  if(!(idx>=0&&idx<LIST.length))idx=0;
+  function set(s){status=s;onChange();}
+  function play(){
+    if(!a){a=new Audio();a.preload='none';
+      a.addEventListener('playing',function(){set('грає');});
+      a.addEventListener('waiting',function(){if(on)set('підключаюсь…');});
+      a.addEventListener('error',function(){if(!on)return;if(!http){http=true;a.src=LIST[idx].url.replace('https:','http:');try{a.play();}catch(e){}return;}set('у цьому прев’ю радіо заблоковане, на ТВ запрацює');});}
+    http=false;a.src=LIST[idx].url;a.volume=Math.max(0,Math.min(1,Snd.vol('music')));set('підключаюсь…');
+    try{var p=a.play();if(p&&p.catch)p.catch(function(){if(on)set('у цьому прев’ю радіо заблоковане, на ТВ запрацює');});}catch(e){set('не вдалося увімкнути тут');}
+  }
+  function stop(){if(a){a.pause();a.removeAttribute('src');try{a.load();}catch(e){}}set('');}
+  return{
+    list:LIST,
+    isOn:function(){return on;},
+    idx:function(){return idx;},
+    status:function(){return status;},
+    toggle:function(){on=!on;if(on){if(Snd.isOn('music'))Snd.set('music',false);play();}else stop();onChange();},
+    off:function(){if(on){on=false;stop();}},
+    move:function(d){idx=(idx+d+LIST.length)%LIST.length;save('pixeltv-stream',idx);if(on)play();else onChange();},
+    setVol:function(v){if(a)a.volume=Math.max(0,Math.min(1,v));},
+    onChange:function(f){onChange=f;}
+  };
+})();
+Snd.hook('music',function(s){if(s.on)Stream.off();Stream.setVol(s.vol);});
+
+function precipNow(){if(Snd.isOn('storm')||Snd.isOn('rain'))return 'rain';return weather.precip;}
+
+/* =================== PRECIPITATION =================== */
+function Precip(n,x0,y0,x1,y1,seed){
+  var r=rng(seed),p=[],i;
+  for(i=0;i<n;i++)p.push({x:x0+r()*(x1-x0),y:y0+r()*(y1-y0),s:.6+r()*.8,o:r()*6.28});
+  this.p=p;this.x0=x0;this.y0=y0;this.x1=x1;this.y1=y1;
+}
+Precip.prototype.draw=function(g,dt,t,type,snowC,rainC){
+  if(!type)return;
+  var p=this.p,i,q,w=this.x1-this.x0,h=this.y1-this.y0,heavy=Snd.isOn('storm');
+  for(i=0;i<p.length;i++){
+    if(type==='rain'&&!heavy&&i%3===2)continue;
+    q=p[i];
+    if(type==='snow'){q.y+=dt*7*q.s;q.x+=Math.sin(t*1.2+q.o)*dt*3;}
+    else{q.y+=dt*(heavy?95:70)*q.s;q.x-=dt*(heavy?20:12)*q.s;}
+    if(q.y>this.y1)q.y-=h;
+    if(q.x<this.x0)q.x+=w;if(q.x>this.x1)q.x-=w;
+    if(type==='snow')px(g,q.x,q.y,snowC);
+    else{px(g,q.x,q.y,rainC);px(g,q.x+1,q.y-1,rainC);px(g,q.x+2,q.y-2,rainC);}
+  }
+};
+function drawStars(stars,t,lit,dim){if(Sky.stars<=0)return;b.globalAlpha=Sky.stars;
+  for(var i=0;i<stars.length;i++){var s=stars[i];px(b,s[0],s[1],Math.sin(t*1.3+s[2])>.55?lit:dim);}b.globalAlpha=1;}
+
+/* =================== SCENE 1: EVENING VINNYTSIA =================== */
+var City=(function(){
+  var layer=mk(),g=layer.getContext('2d'),r=rng(11),windows=[],stars=[],i,x,y,cache={};
+  for(i=0;i<46;i++){x=r()*W|0;y=r()*44|0;if(Math.abs(x-156)<11&&y<29)continue;stars.push([x,y,r()*6.28]);}
+  x=0;while(x<W){var w=6+(r()*10|0),top=56+(r()*16|0);rect(g,x,top,w,90-top,'#1a2046');if(r()<.3)rect(g,x+(w>>1),top-4,1,4,'#1a2046');x+=w;}
+  rect(g,86,38,9,52,'#3b2433');for(y=40;y<88;y+=3)rect(g,86,y,9,1,'#331e2b');
+  rect(g,84,32,13,6,'#4a2d3c');rect(g,84,37,13,1,'#2a1a26');
+  for(i=0;i<6;i++)rect(g,90-i,26+i,2*i+1,1,'#2a1a26');
+  rect(g,90,20,1,6,'#2a1a26');rect(g,91,20,2,1,'#a33a3a');
+  rect(g,88,33,5,3,'#e8c47a');px(g,90,34,'#3b2433');
+  x=-3;while(x<W){
+    var bw=12+(r()*14|0),bt=64+(r()*14|0);
+    if(x+bw>80&&x<101){x=101;continue;}
+    rect(g,x,bt,bw,90-bt,'#0d1022');
+    for(y=bt+2;y<86;y+=3)for(var wx=x+2;wx<x+bw-2;wx+=3)windows.push({x:wx,y:y,on:r()<.33,tv:r()<.15,h:r()});
+    x+=bw+(r()<.3?2:0);
+  }
+  rect(g,0,88,W,20,'#090b17');rect(g,0,88,W,2,'#1c1f36');
+  rect(g,0,97,W,1,'#2b2f4d');rect(g,0,100,W,1,'#2b2f4d');rect(g,0,79,W,1,'#1b1e35');
+  var lamps=[22,62,138,178];
+  for(i=0;i<lamps.length;i++){rect(g,lamps[i],74,1,14,'#2a2d45');rect(g,lamps[i]-1,73,3,1,'#2a2d45');}
+  var pr=new Precip(90,0,0,W,108,3),acc=0,lastCycle=-1;
+  return function(t,dt){
+    Sky.drawSky(b,0,0,W,90);drawStars(stars,t,'#ffffff','#6f78b3');Sky.drawSun(b);
+    b.drawImage(Sky.tinted(layer,cache),0,0);
+    acc+=dt;if(acc>.35){acc=0;var w=windows[(Math.random()*windows.length)|0];w.on=!w.on;}
+    for(i=0;i<windows.length;i++){var q=windows[i];if(q.on&&q.h<Sky.win)rect(b,q.x,q.y,2,1,q.tv?'#9fd3ff':'#ffcf6b');}
+    if(Sky.lamps>0){b.globalAlpha=.09*Sky.lamps;for(i=0;i<lamps.length;i++)for(var k=1;k<14;k++)rect(b,lamps[i]-k*.6,74+k,k*1.2+1,1,'#ffe2a0');
+      b.globalAlpha=Sky.lamps;for(i=0;i<lamps.length;i++)rect(b,lamps[i]-1,74,3,1,'#ffe8b0');b.globalAlpha=1;}
+    var cyc=Math.floor(t/26),tx=-40+((t%26)/26)*(W+80);
+    if(cyc!==lastCycle){lastCycle=cyc;Snd.event('tram');}
+    rect(b,tx,89,32,8,'#b8352c');rect(b,tx,90,32,3,'#f2e6c9');
+    for(i=0;i<6;i++)rect(b,tx+2+i*5,90,3,2,Sky.lamps>.4?'#ffd98a':'#8fa6b8');
+    rect(b,tx+4,97,3,1,'#111');rect(b,tx+25,97,3,1,'#111');
+    rect(b,tx+15,81,1,8,'#555b7a');rect(b,tx+12,80,7,1,'#555b7a');
+    pr.draw(b,dt,t,precipNow(),'#e8ecff','#6f7fb8');
+  };
+})();
+
+/* =================== SCENE 2: CAMPFIRE =================== */
+var Fire=(function(){
+  var layer=mk(),g=layer.getContext('2d'),r=rng(5),stars=[],i,x,cache={};
+  for(i=0;i<60;i++)stars.push([r()*W|0,r()*50|0,r()*6.28]);
+  for(x=0;x<W;x++){var hh=66+Math.sin(x*.05)*5+Math.sin(x*.13+1)*2;rect(g,x,hh,1,H-hh,'#0c1c22');}
+  function tree(cx,top,h,c){for(var k=0;k<h;k++){var w=1+Math.floor(k*.38)-(k%5<2&&k>4?1:0);rect(g,cx-w,top+k,2*w+1,1,c);}rect(g,cx,top+h,1,3,c);}
+  for(x=2;x<W;x+=7+(r()*4|0))tree(x,70-(r()*8|0),12+(r()*8|0),'#0a171d');
+  rect(g,0,86,W,22,'#0a120f');
+  var big=[[4,46,40],[18,52,34],[32,58,28],[162,56,30],[176,48,38],[190,52,34]];
+  for(i=0;i<big.length;i++)tree(big[i][0],big[i][1],big[i][2],'#050c0f');
+  rect(g,87,86,19,2,'#3a2416');rect(g,89,85,15,1,'#4d2f1c');
+  var stones=[84,86,105,107];for(i=0;i<stones.length;i++)rect(g,stones[i],87,2,1,'#2b2b33');
+  var sparks=[],flies=[];
+  for(i=0;i<22;i++)sparks.push({x:96,y:85,vy:0,life:-1});
+  for(i=0;i<9;i++)flies.push({ox:20+r()*150,oy:55+r()*28,p:r()*6.28});
+  var pr=new Precip(60,0,0,W,108,9);
+  return function(t,dt){
+    Sky.drawSky(b,0,0,W,80);drawStars(stars,t,'#ffffff','#4d6377');Sky.drawSun(b);
+    b.drawImage(Sky.tinted(layer,cache),0,0);var i;
+    var rad=30+Math.sin(t*7)*1.5+Math.sin(t*13),ga=.30*(1-Sky.day*.6);
+    var gr=b.createRadialGradient(96,82,2,96,82,rad);gr.addColorStop(0,'rgba(255,150,70,'+ga.toFixed(3)+')');gr.addColorStop(1,'rgba(255,120,50,0)');
+    b.fillStyle=gr;b.fillRect(56,48,80,60);
+    for(var dx=-6;dx<=6;dx++){
+      var n=Math.sin(t*9+dx*1.7)*.5+Math.sin(t*5.3+dx*.9)*.5,hm=Math.max(1,(7-Math.abs(dx))*1.7+n*3.5);
+      for(var yy=0;yy<hm;yy++){var f=yy/hm,c;
+        if(f<.35&&Math.abs(dx)<3)c='#fff3b0';else if(f<.6)c='#ffb347';else if(f<.85)c='#f06a2c';else c='#9b2f1d';
+        px(b,96+dx,84-yy,c);}
+    }
+    for(i=0;i<sparks.length;i++){var p=sparks[i];
+      if(p.life<=0){if(Math.random()<dt*2){p.x=94+Math.random()*5;p.y=78;p.vy=8+Math.random()*8;p.life=1.5+Math.random()*1.5;p.o=Math.random()*6;}continue;}
+      p.life-=dt;p.y-=p.vy*dt;p.x+=Math.sin(t*3+p.o)*dt*6;px(b,p.x,p.y,p.life>1?'#ffcf6b':'#ff8a3d');}
+    if(Sky.stars>.3)for(i=0;i<flies.length;i++){var q=flies[i],a=Math.sin(t*1.6+q.p*3);if(a>.2)px(b,q.ox+Math.sin(t*.4+q.p)*12,q.oy+Math.cos(t*.5+q.p)*5,a>.7?'#e2ff8a':'#8fb04a');}
+    pr.draw(b,dt,t,precipNow(),'#dfe8ef','#4e6a80');
+  };
+})();
+
+/* =================== SCENE 3: MY DESK =================== */
+var Room=(function(){
+  var layer=mk(),g=layer.getContext('2d'),win=mk(),wg=win.getContext('2d'),r=rng(21),i,x,y,cache={},dots=[];
+  // view outside: buildings only, sky is drawn live
+  for(x=21;x<81;x+=5+(r()*4|0)){var bw=Math.min(6,81-x),bt=40+(r()*14|0);rect(wg,x,bt,bw,63-bt,'#0c1428');for(y=bt+2;y<62;y+=3)if(r()<.35&&bw>2)dots.push([x+2,y,r()]);}
+  // room
+  rect(g,0,0,W,90,'#2a2033');for(x=3;x<W;x+=8)rect(g,x,0,1,90,'#2f253a');
+  rect(g,18,12,66,54,'#5a4232');g.clearRect(21,15,60,48);
+  rect(g,50,15,2,48,'#5a4232');rect(g,21,38,60,2,'#5a4232');
+  rect(g,14,63,74,4,'#6e523d');rect(g,14,63,74,1,'#86664c');
+  rect(g,6,7,90,1,'#3a2c25');
+  rect(g,9,8,9,62,'#7a3b3b');rect(g,84,8,9,62,'#7a3b3b');
+  for(y=8;y<70;y++){px(g,12,y,'#5e2c2e');px(g,15,y,'#5e2c2e');px(g,87,y,'#5e2c2e');px(g,90,y,'#5e2c2e');}
+  rect(g,124,16,26,20,'#1a1420');rect(g,126,18,22,16,'#3b5a7a');
+  for(i=0;i<7;i++)rect(g,129+i,32-i,16-2*i,1,'#2c4258');
+  rect(g,136,26,2,1,'#e8eef2');rect(g,135,27,4,1,'#e8eef2');rect(g,143,21,3,3,'#f2d27a');
+  rect(g,0,90,W,18,'#1c1420');for(x=0;x<W;x+=16)rect(g,x,90,1,18,'#171019');
+  rect(g,96,97,76,8,'#4a2a3a');for(x=98;x<170;x+=4)px(g,x,100,'#6a3e52');
+  rect(g,66,80,10,10,'#a0583a');rect(g,65,80,12,1,'#b86a48');
+  var leaves=[[70,72],[71,70],[69,74],[72,75],[74,73],[67,76],[75,77],[68,78],[73,78],[71,76]];
+  for(i=0;i<leaves.length;i++)rect(g,leaves[i][0],leaves[i][1],2,2,i%2?'#3f7a4a':'#4f9058');
+  rect(g,88,72,102,3,'#6a4630');rect(g,88,72,102,1,'#7d5539');rect(g,90,75,2,15,'#4e3323');rect(g,185,75,2,15,'#4e3323');
+  function bear(bx,by,body,scarf,dark){
+    var rows=['o...o','ooooo','oeoeo','oonoo','sssss','oosoo','oo.oo'],k,j,c;
+    for(k=0;k<rows.length;k++)for(j=0;j<5;j++){c=rows[k].charAt(j);if(c==='.')continue;
+      px(g,bx+j,by+k,c==='o'?body:c==='s'?scarf:c==='n'?dark:'#1a1010');}
+  }
+  bear(91,65,'#e8913a','#2a9bb8','#7a4116');
+  bear(97,65,'#2a9bb8','#e8913a','#124a5a');
+  rect(g,104,68,5,4,'#2f7f86');px(g,105,69,'#7fd0d4');rect(g,105,67,3,1,'#2f7f86');
+  rect(g,106,58,1,9,'#c9c9cf');rect(g,104,58,5,1,'#c9c9cf');rect(g,105,55,3,3,'#a65a3a');
+  px(g,107,62,'#c9c9cf');px(g,108,63,'#3b3b44');px(g,109,64,'#3b3b44');px(g,110,65,'#3b3b44');px(g,110,66,'#3b3b44');px(g,110,67,'#3b3b44');px(g,109,68,'#3b3b44');px(g,110,69,'#3b3b44');px(g,111,70,'#3b3b44');
+  rect(g,118,42,36,23,'#0d0d10');rect(g,135,65,2,5,'#1a1a1f');rect(g,128,70,16,2,'#1a1a1f');
+  rect(g,126,59,22,11,'#3a3f4c');rect(g,124,70,26,2,'#b4b9c4');rect(g,124,71,26,1,'#8d929c');px(g,137,59,'#5a5f6c');
+  rect(g,152,67,3,5,'#d9d2c3');px(g,155,68,'#d9d2c3');px(g,155,69,'#d9d2c3');rect(g,152,67,3,1,'#4a2c1c');
+  rect(g,157,62,4,10,'#161618');rect(g,158,64,2,2,'#2c2c30');rect(g,158,67,2,3,'#2c2c30');
+  rect(g,162,52,8,20,'#ecebe6');rect(g,169,52,1,20,'#c9c7c0');rect(g,162,52,8,1,'#f7f6f2');
+  for(y=-3;y<=3;y++)for(x=-3;x<=3;x++)if(x*x+y*y<=8)px(g,165.5+x,56.5+y,(x+y)%2?'#1b1b1b':'#262626');
+  var cD='#262836',cH='#3a3d50',cM='#6b6f7a';
+  for(y=56;y<77;y++){var sx=176+Math.round((y-56)*.18),cw=(y<58||y>74)?8:10;rect(g,sx+(10-cw)/2,y,cw,1,cD);px(g,sx+(10-cw)/2,y,cH);}
+  for(y=62;y<70;y+=3)rect(g,178+Math.round((y-56)*.18),y,6,1,'#2e3142');
+  rect(g,181,77,2,4,cM);
+  rect(g,169,80,18,1,cH);rect(g,168,81,18,3,cD);rect(g,168,84,17,1,'#1c1d27');
+  rect(g,168,73,7,1,cD);px(g,168,73,cH);rect(g,172,74,1,6,cM);
+  rect(g,177,85,2,9,cM);rect(g,176,85,4,1,'#1c1d27');
+  rect(g,168,94,21,1,cM);rect(g,173,95,11,1,cM);px(g,178,96,cM);px(g,178,97,cM);
+  rect(g,167,95,2,2,'#111');rect(g,188,95,2,2,'#111');rect(g,171,96,2,2,'#111');rect(g,184,96,2,2,'#111');rect(g,177,98,2,2,'#111');
+  var pr=new Precip(70,21,15,81,63,4),code=[],last=-1,smoke=[],hov=0,wstars=[];
+  var ads=[{on:true,name:7,res:3,sp:4},{on:true,name:5,res:1,sp:3},{on:false,name:8,res:2,sp:2},{on:true,name:6,res:4,sp:5}];
+  for(i=0;i<5;i++)code.push([1+(Math.random()*4|0),3+(Math.random()*10|0),'#5fd3b8']);
+  for(i=0;i<14;i++)smoke.push({life:-1});
+  for(i=0;i<9;i++)wstars.push([24+i*6.3,18+(i*7)%18,i*2.3]);
+  var cols=['#ffcf6b','#ff8a7a','#9fe0ff','#b8f28a'];
+  return function(t,dt){
+    var i,k;
+    // outside the window
+    Sky.drawSky(b,21,15,60,48);
+    if(Sky.stars>0){b.globalAlpha=Sky.stars;for(i=0;i<wstars.length;i++)if(Math.sin(t+wstars[i][2])>.2)px(b,wstars[i][0],wstars[i][1],'#ffffff');b.globalAlpha=1;}
+    b.drawImage(Sky.tinted(win,cache),0,0);
+    for(i=0;i<dots.length;i++)if(dots[i][2]<Sky.win)px(b,dots[i][0],dots[i][1],'#e7b866');
+    b.save();b.beginPath();b.rect(21,15,60,48);b.clip();
+    var pp=precipNow();if(pp)pr.draw(b,dt,t,pp,'#e8ecff','#5c7cb0');
+    b.restore();
+    // the room on top (its frame covers the edges of the view)
+    b.drawImage(layer,0,0);
+    if(Sky.day>0){
+      b.globalAlpha=Sky.day*.10;b.fillStyle='#fff2d0';b.beginPath();b.moveTo(21,63);b.lineTo(81,63);b.lineTo(118,108);b.lineTo(46,108);b.closePath();b.fill();
+      b.globalAlpha=Sky.day*.07;rect(b,0,0,W,H,'#fff4e0');b.globalAlpha=1;}
+    for(x=4;x<190;x++){var gy=4+Math.round(Math.sin(x*.07)*1.5);px(b,x,gy,'#3a2c25');
+      if(x%8===0){var on=Math.sin(t*1.5+x*.37)>-.3;rect(b,x,gy+1,1,2,on?cols[(x/8)%4]:'#4a3a40');
+        if(on){b.globalAlpha=.18*(1-Sky.day*.6);rect(b,x-1,gy,3,4,cols[(x/8)%4]);b.globalAlpha=1;}}}
+    var gr=b.createRadialGradient(136,52,2,136,52,50);gr.addColorStop(0,'rgba(200,220,255,'+(.2*(1-Sky.day*.5)).toFixed(3)+')');gr.addColorStop(1,'rgba(200,220,255,0)');
+    b.fillStyle=gr;b.fillRect(86,6,104,92);
+    var gw=b.createRadialGradient(104,62,2,104,62,34);gw.addColorStop(0,'rgba(255,190,120,0.12)');gw.addColorStop(1,'rgba(255,190,120,0)');
+    b.fillStyle=gw;b.fillRect(70,28,70,70);
+    // monitor: Meta Ads Manager
+    rect(b,119,43,34,20,'#f0f2f5');
+    rect(b,119,43,34,2,'#ffffff');rect(b,120,43,2,1,'#1877f2');px(b,121,44,'#1877f2');rect(b,138,43,10,1,'#e4e6eb');px(b,151,43,'#bcc0c4');
+    rect(b,119,45,3,18,'#ffffff');for(k=0;k<5;k++)px(b,120,47+k*3,k===0?'#1877f2':'#8a8d91');
+    rect(b,124,46,5,1,'#42b72a');rect(b,131,46,4,1,'#bcc0c4');rect(b,137,46,4,1,'#bcc0c4');
+    var step=Math.floor(t/.7);
+    if(step!==last){last=step;code.shift();
+      code.push([1+(Math.random()*4|0),3+(Math.random()*10|0),['#5fd3b8','#e0c36a','#9ab0ff','#e88aa0'][Math.random()*4|0]]);
+      for(k=0;k<ads.length;k++){if(ads[k].on&&Math.random()<.6){ads[k].res+=Math.random()<.5?1:0;ads[k].sp=Math.min(6,ads[k].sp+(Math.random()<.3?1:0));}}
+      if(Math.random()<.08){var a=ads[(Math.random()*ads.length)|0];a.on=!a.on;}
+      if(Math.random()<.25)hov=(hov+1)%ads.length;}
+    var tabs=[124,133,141];
+    for(k=0;k<3;k++){rect(b,tabs[k],48,6,1,k===0?'#1c1e21':'#8a8d91');if(k===0)rect(b,tabs[k],49,6,1,'#1877f2');}
+    rect(b,123,50,30,9,'#ffffff');rect(b,123,50,30,1,'#e4e6eb');
+    for(k=0;k<ads.length;k++){var ry=52+k*2,ad=ads[k];
+      if(k===hov)rect(b,123,ry,30,1,'#e7f3ff');
+      rect(b,124,ry,2,1,ad.on?'#1877f2':'#bcc0c4');px(b,ad.on?125:124,ry,'#ffffff');
+      rect(b,127,ry,ad.name,1,'#4b4f56');px(b,136,ry,ad.on?'#31a24c':'#bcc0c4');
+      rect(b,139,ry,Math.min(5,1+ad.res%5),1,'#1c1e21');rect(b,146,ry,ad.sp,1,'#65676b');}
+    rect(b,127,60,20,9,'#123232');
+    for(k=0;k<4;k++)rect(b,128+code[k+1][0],61+k*2,Math.min(code[k+1][1],17-code[k+1][0]),1,code[k+1][2]);
+    px(b,163,69,Math.sin(t*.8)>0?'#ffffff':'#b5b3ac');
+    for(k=0;k<3;k++){var sy=((t*4+k*3)%9);px(b,153+Math.sin(t*2+k)*1.2,65-sy,sy<5?'#b8b2a8':'#6d6872');}
+    px(b,106,54,Math.sin(t*6)>0?'#ffb36b':'#ff6a3a');px(b,105,54,'#ff7a3a');
+    if(fx.puff>0)fx.puff-=dt*.4;
+    for(k=0;k<smoke.length;k++){var m=smoke[k];
+      if(m.life<=0){if(Math.random()<dt*(fx.puff>0?6:.8)){m.x=106;m.y=53;m.life=2+Math.random()*2;m.o=Math.random()*6;}continue;}
+      m.life-=dt;m.y-=dt*4;m.x+=Math.sin(t*1.5+m.o)*dt*3+dt*.6;
+      b.globalAlpha=Math.min(.7,m.life*.3);px(b,m.x,m.y,'#cfcad8');b.globalAlpha=1;}
+    var br=Math.sin(t*1.6)>0?1:0;
+    rect(b,34,59-br,14,4+br,'#141018');rect(b,36,58-br,10,1,'#141018');
+    rect(b,46,56,6,6,'#141018');px(b,46,55,'#141018');px(b,51,55,'#141018');
+    px(b,48,59,'#3a2f45');px(b,50,59,'#3a2f45');
+    var sw=Math.round(Math.sin(t*1.3)*2);rect(b,33,62,2,1,'#141018');
+    for(var ty=0;ty<6;ty++)px(b,33+(ty>2?sw:0),63+ty,'#141018');
+  };
+})();
+
+var scenes=[
+  {name:'Вечірня Вінниця',draw:City,preset:['city','wind']},
+  {name:'Вогнище в лісі',draw:Fire,preset:['fire','crickets','wind']},
+  {name:'Мій стіл',draw:Room,preset:['music','rain','purr']}
+];
+var cur=load('pixeltv-scene',0);if(!(cur>=0&&cur<scenes.length))cur=0;
+var menuOpen=false;
+function setScene(i){cur=(i+scenes.length)%scenes.length;$('themeName').textContent=scenes[cur].name;save('pixeltv-scene',cur);if(menuOpen)renderMenu();}
+setScene(cur);
+Snd.on('thunder',function(){fx.flash=1;});
+Snd.on('hookah',function(){fx.puff=1;});
+
+/* =================== RENDER LOOP =================== */
+function resize(){screen.width=window.innerWidth;screen.height=window.innerHeight;}
+window.addEventListener('resize',resize);resize();
+var lastT=0,start=null;
+function frame(ts){
+  if(start===null)start=ts;
+  var t=(ts-start)/1000,dt=t-lastT;
+  if(dt>=1/20){
+    if(dt>.25)dt=.25;lastT=t;
+    b.clearRect(0,0,W,H);
+    scenes[cur].draw(t,dt);
+    if(fx.flash>0){b.globalAlpha=Math.min(1,fx.flash)*(Math.sin(t*40)>-.2?.55:.15);rect(b,0,0,W,H,'#dfe6ff');b.globalAlpha=1;fx.flash-=dt*2.2;}
+    var sw=screen.width,sh=screen.height,s=Math.max(sw/W,sh/H),dw=W*s,dh=H*s;
+    sctx.imageSmoothingEnabled=false;sctx.webkitImageSmoothingEnabled=false;
+    sctx.drawImage(buf,(sw-dw)/2,(sh-dh)/2,dw,dh);
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+/* =================== CLOCK STYLES =================== */
+var DAYS=['неділя','понеділок','вівторок','середа','четвер','пʼятниця','субота'];
+var MONTHS=['січня','лютого','березня','квітня','травня','червня','липня','серпня','вересня','жовтня','листопада','грудня'];
+var STYLES=[{id:'digital',name:'піксельний'},{id:'analog',name:'аналоговий'},{id:'flip',name:'перекидний'},{id:'mini',name:'маленький'}];
+var cstyle=load('pixeltv-clock',0);if(!(cstyle>=0&&cstyle<STYLES.length))cstyle=0;
+var ac=$('cAnalog').getContext('2d');var AS=$('cAnalog').width/56;if(AS!==1)ac.scale(AS,AS);
+function pad(n){return n<10?'0'+n:''+n;}
+function line(g,x0,y0,x1,y1,c){x0=Math.round(x0);y0=Math.round(y0);x1=Math.round(x1);y1=Math.round(y1);
+  var dx=Math.abs(x1-x0),dy=-Math.abs(y1-y0),sx=x0<x1?1:-1,sy=y0<y1?1:-1,e=dx+dy;
+  for(;;){px(g,x0,y0,c);if(x0===x1&&y0===y1)break;var e2=2*e;if(e2>=dy){e+=dy;x0+=sx;}if(e2<=dx){e+=dx;y0+=sy;}}}
+function drawAnalog(d){
+  var g=ac,cx=28,cy=28,x,y,i;g.clearRect(0,0,56,56);
+  for(y=0;y<56;y++)for(x=0;x<56;x++){var dd=(x-cx+.5)*(x-cx+.5)+(y-cy+.5)*(y-cy+.5);
+    if(dd<=24*24)px(g,x,y,'rgba(10,11,28,0.72)');else if(dd<=26.5*26.5)px(g,x,y,'#f5ecd8');}
+  for(i=0;i<12;i++){var a=i/12*Math.PI*2,mx=cx+Math.sin(a)*20.5,my=cy-Math.cos(a)*20.5;
+    if(i%3===0)rect(g,mx-1,my-1,2,2,'#ffcf6b');else px(g,mx,my,'#c4bdd6');}
+  var h=d.getHours()%12+d.getMinutes()/60,m=d.getMinutes()+d.getSeconds()/60,s=d.getSeconds();
+  function hand(frac,len,c,thick){var a=frac*Math.PI*2,ex=cx+Math.sin(a)*len,ey=cy-Math.cos(a)*len;line(g,cx,cy,ex,ey,c);if(thick)line(g,cx-1,cy,ex-1,ey,c);}
+  hand(h/12,11,'#f5ecd8',true);hand(m/60,17,'#f5ecd8',false);hand(s/60,19,'#ff8a5c',false);
+  rect(g,cx-1,cy-1,2,2,'#ffcf6b');
+}
+var flipPrev='';
+function tick(){
+  var d=new Date(),st=STYLES[cstyle].id,hh=pad(d.getHours()),mm=pad(d.getMinutes());
+  $('cDigital').hidden=!(st==='digital'||st==='mini');$('cAnalog').hidden=st!=='analog';$('cFlip').hidden=st!=='flip';
+  $('clockwrap').className=st==='mini'?'mini':'';
+  $('hh').textContent=hh;$('mm').textContent=mm;$('colon').className=d.getSeconds()%2?'dim':'';
+  if(st==='analog')drawAnalog(d);
+  if(st==='flip'){var s=hh+mm;for(var i=0;i<4;i++){var el=$('f'+i),c=s.charAt(i);if(el.textContent!==c||flipPrev===''){el.textContent=c;el.className='tile';void el.offsetWidth;if(flipPrev!=='')el.className='tile go';}}flipPrev=s;}
+  $('date').textContent=DAYS[d.getDay()]+', '+d.getDate()+' '+MONTHS[d.getMonth()];
+}
+function setClock(i){cstyle=(i+STYLES.length)%STYLES.length;save('pixeltv-clock',cstyle);$('clockBtn').textContent='Годинник: '+STYLES[cstyle].name;flipPrev='';tick();}
+setClock(cstyle);setInterval(tick,1000);
+
+/* =================== WEATHER (Open-Meteo, Вінниця) =================== */
+function codeInfo(c){
+  if(c===0)return['ясно',null];if(c<=2)return['мінлива хмарність',null];if(c===3)return['хмарно',null];
+  if(c===45||c===48)return['туман',null];if(c>=51&&c<=57)return['мряка','rain'];if(c>=61&&c<=67)return['дощ','rain'];
+  if(c>=71&&c<=77)return['сніг','snow'];if(c>=80&&c<=82)return['злива','rain'];if(c===85||c===86)return['снігопад','snow'];
+  if(c>=95)return['гроза','rain'];return['—',null];
+}
+function showWeather(){
+  var tv=Math.round(weather.temp);
+  $('temp').textContent=(tv<0?'−'+(-tv):(tv>0?'+'+tv:'0'))+'°';$('wdesc').textContent=weather.desc;
+  var d=new Date();$('wplace').textContent=weather.live?'Вінниця · оновлено '+pad(d.getHours())+':'+pad(d.getMinutes()):'Вінниця · приклад погоди';
+}
+function loadWeather(){
+  try{var x=new XMLHttpRequest();
+    x.open('GET',(loadWeather.http?'http':'https')+'://api.open-meteo.com/v1/forecast?latitude=49.23&longitude=28.47&current=temperature_2m,weather_code&timezone=auto');
+    x.timeout=7000;
+    x.onerror=x.ontimeout=function(){if(!loadWeather.http){loadWeather.http=true;loadWeather();}};
+    x.onload=function(){try{var j=JSON.parse(x.responseText),c=j.current,info=codeInfo(c.weather_code);weather.temp=c.temperature_2m;weather.desc=info[0];weather.precip=info[1];weather.live=true;showWeather();}catch(e){}};
+    x.send();}catch(e){}
+}
+showWeather();loadWeather();setInterval(loadWeather,20*60*1000);
+
+/* =================== SOUND MENU =================== */
+var focusIdx=0;
+function menuItems(){
+  var a=[{kind:'preset',label:'Увімкнути звуки сцени «'+scenes[cur].name+'»'}];
+  a.push({kind:'group',label:'Музика'});
+  a.push({kind:'ch',id:'music',label:'Генерована музика'});
+  a.push({kind:'station',label:'Стиль'});
+  a.push({kind:'stream',label:'Lo-fi радіо онлайн'});
+  a.push({kind:'group',label:'Атмосфера'});
+  for(var i=1;i<Snd.defs.length;i++)a.push({kind:'ch',id:Snd.defs[i].id,label:Snd.defs[i].name});
+  a.push({kind:'off',label:'Вимкнути всі звуки'});
+  a.push({kind:'close',label:'Закрити'});
+  return a;
+}
+function selectable(it){return it.kind!=='group';}
+function renderMenu(){
+  var items=menuItems(),html='',i,it,v,k,m;
+  if(!selectable(items[focusIdx]))focusIdx++;
+  for(i=0;i<items.length;i++){it=items[i];var fc=i===focusIdx?' focus':'';
+    if(it.kind==='group'){html+='<div class="group">'+it.label+'</div>';continue;}
+    if(it.kind==='ch'){
+      v=Snd.vol(it.id);m='';for(k=1;k<=10;k++)m+='<i class="'+(k<=Math.round(v*10)?'f':'')+'"></i>';
+      html+='<div class="row'+(Snd.isOn(it.id)?' active':'')+fc+'" data-i="'+i+'"><span class="dot"></span><span class="label">'+it.label+'</span>'+
+        '<span class="vol"><button data-d="-1" data-i="'+i+'" aria-label="Тихіше">−</button><span class="meter">'+m+'</span><button data-d="1" data-i="'+i+'" aria-label="Гучніше">+</button></span></div>';
+    }else if(it.kind==='station'){
+      html+='<div class="row child'+fc+'" data-i="'+i+'"><span></span><span class="label">Стиль</span>'+
+        '<span class="pick"><button data-p="-1" data-i="'+i+'" aria-label="Попередній стиль">◀</button><span>'+STATIONS[Music.station()].name+'</span><button data-p="1" data-i="'+i+'" aria-label="Наступний стиль">▶</button></span></div>';
+    }else if(it.kind==='stream'){
+      var sObj=Stream.list[Stream.idx()],stat=Stream.status();
+      html+='<div class="row'+(Stream.isOn()?' active':'')+fc+'" data-i="'+i+'"><span class="dot"></span><span class="label">'+it.label+
+        '<span class="sub">'+(stat?stat:sObj.sub+' · гучність як у музики')+'</span></span>'+
+        '<span class="pick"><button data-p="-1" data-i="'+i+'" aria-label="Попередня станція">◀</button><span>'+sObj.name+'</span><button data-p="1" data-i="'+i+'" aria-label="Наступна станція">▶</button></span></div>';
+    }else html+='<div class="row wide'+fc+'" data-i="'+i+'"><span>'+(it.kind==='close'?'×':it.kind==='off'?'■':'▶')+'</span><span class="label">'+it.label+'</span></div>';
+  }
+  $('rows').innerHTML=html;
+  var f=$('rows').querySelector('.focus');if(f&&f.scrollIntoView)try{f.scrollIntoView({block:'nearest'});}catch(e){}
+}
+Stream.onChange(function(){if(menuOpen)renderMenu();});
+function activate(i){
+  var it=menuItems()[i];if(!it)return;
+  if(it.kind==='ch')Snd.toggle(it.id);
+  else if(it.kind==='station')Snd.toggle('music');
+  else if(it.kind==='stream'){Snd.unlock();Stream.toggle();}
+  else if(it.kind==='preset'){Stream.off();var p=scenes[cur].preset;for(var k=0;k<Snd.defs.length;k++){var id=Snd.defs[k].id;Snd.set(id,p.indexOf(id)>=0);}}
+  else if(it.kind==='off'){Stream.off();for(var j=0;j<Snd.defs.length;j++)Snd.set(Snd.defs[j].id,false);}
+  else if(it.kind==='close'){openMenu(false);return;}
+  renderMenu();
+}
+function sideways(i,d){
+  var it=menuItems()[i];
+  if(it.kind==='ch'){Snd.nudge(it.id,d*.1);if(!Snd.isOn(it.id)&&d>0)Snd.set(it.id,true);}
+  else if(it.kind==='station')Music.setStation(Music.station()+d);
+  else if(it.kind==='stream')Stream.move(d);
+  renderMenu();
+}
+function openMenu(o){menuOpen=o;$('menuwrap').hidden=!o;$('soundsBtn').className=o?'on':'';if(o){focusIdx=0;renderMenu();}}
+$('rows').addEventListener('click',function(e){
+  var el=e.target;while(el&&el!==this&&!el.getAttribute('data-i'))el=el.parentNode;if(!el||el===this)return;
+  var i=parseInt(el.getAttribute('data-i'),10),d=el.getAttribute('data-d'),p=el.getAttribute('data-p');focusIdx=i;Snd.unlock();
+  if(d)sideways(i,parseInt(d,10));else if(p)sideways(i,parseInt(p,10));else activate(i);
+});
+
+/* =================== CONTROLS =================== */
+var barwrap=$('barwrap'),hideT;
+function wake(){barwrap.className='barwrap';clearTimeout(hideT);hideT=setTimeout(function(){if(!menuOpen)barwrap.className='barwrap hide';},9000);}
+wake();
+function lightLabel(){$('lightBtn').textContent='Світло: '+Sky.modeName();}
+lightLabel();
+$('prev').addEventListener('click',function(){setScene(cur-1);wake();});
+$('next').addEventListener('click',function(){setScene(cur+1);wake();});
+$('soundsBtn').addEventListener('click',function(){Snd.unlock();openMenu(!menuOpen);wake();});
+$('clockBtn').addEventListener('click',function(){setClock(cstyle+1);wake();});
+var lightIdx=0;
+(function(){var names=['авто','ранок','день','захід','ніч'];for(var k=0;k<names.length;k++)if(names[k]===Sky.modeName())lightIdx=k;})();
+$('lightBtn').onclick=function(){lightIdx=(lightIdx+1)%5;Sky.setMode(lightIdx);lightLabel();wake();};
+$('fs').addEventListener('click',function(){var el=document.documentElement;try{var p=(el.requestFullscreen||el.webkitRequestFullscreen).call(el);if(p&&p.catch)p.catch(function(){});}catch(e){}});
+document.addEventListener('mousemove',wake);
+document.addEventListener('pointerdown',function(){Snd.unlock();});
+document.addEventListener('keydown',function(e){
+  var k=e.keyCode,tag=document.activeElement&&document.activeElement.tagName;wake();Snd.unlock();
+  if(menuOpen){
+    var items=menuItems(),n=items.length;
+    if(k===38){do{focusIdx=(focusIdx-1+n)%n;}while(!selectable(items[focusIdx]));renderMenu();}
+    else if(k===40){do{focusIdx=(focusIdx+1)%n;}while(!selectable(items[focusIdx]));renderMenu();}
+    else if(k===37||k===39){sideways(focusIdx,k===39?1:-1);}
+    else if(k===13||k===32){if(tag==='BUTTON')return;activate(focusIdx);}
+    else if(k===27||k===461||k===8){openMenu(false);}
+    else return;
+    e.preventDefault();return;
+  }
+  if(k===403){lightIdx=(lightIdx+1)%5;Sky.setMode(lightIdx);lightLabel();e.preventDefault();return;}
+  if(k===404){setClock(cstyle+1);e.preventDefault();return;}
+  if(k===406){openMenu(true);e.preventDefault();return;}
+  if(k===37)setScene(cur-1);
+  else if(k===39)setScene(cur+1);
+  else if(k===38)openMenu(true);
+  else if(k===40)setClock(cstyle+1);
+  else if(k===13||k===32){if(tag==='BUTTON')return;if(Stream.isOn())Stream.toggle();else Snd.toggle('music');}
+  else return;
+  e.preventDefault();
+});
+if(window.__src){$('srcNote').hidden=false;$('srcNote').textContent='Версія: '+window.__src;}
+try{if(navigator.wakeLock)navigator.wakeLock.request('screen').catch(function(){});}catch(e){}
+})();
+</script>
+
+</body></html>
