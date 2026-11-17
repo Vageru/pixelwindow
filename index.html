@@ -39,7 +39,7 @@ button{font:inherit;color:#f5ecd8;background:transparent;border:2px solid #3d386
 button.on{border-color:#ffcf6b;color:#ffcf6b}
 .keys{color:#c4bdd6;margin-left:auto}
 .menuwrap{position:absolute;top:3vh;right:5vw;bottom:17vh;width:42vw}
-.menu{background:rgba(9,10,24,.84);border:2px solid #3d3866;padding:1vw 1.2vw;font-size:1.6vw;max-height:100%;overflow-y:auto;box-sizing:border-box}
+.menu{background:rgba(9,10,24,.93);border:2px solid #3d3866;padding:1vw 1.2vw;font-size:1.6vw;max-height:100%;overflow-y:auto;box-sizing:border-box}
 .menu h2{font-family:'Pixelify Sans','VT323',monospace;font-weight:600;font-size:1.25em;margin:0 0 4px}
 .menu .hint{color:#c4bdd6;margin:0 0 .6vw;font-size:.85em}
 .menu .group{color:#c4bdd6;font-size:.8em;letter-spacing:.08em;text-transform:uppercase;margin:.6vw 6px 2px}
@@ -275,7 +275,7 @@ var Music=(function(){
   }
   function sched(){var S=ST[STATIONS[station].id];while(nextTime<ctx.currentTime+.2){S.play(step,nextTime,S.sd);nextTime+=S.sd;step++;}}
   function run(){clearInterval(timer);nextTime=ctx.currentTime+.1;step=0;timer=setInterval(sched,40);
-    crk.gain.value=STATIONS[station].id==='lofi'||STATIONS[station].id==='jazz'?.05:0;}
+    crk.gain.value=0;}
   return{
     start:function(c,dest){if(!ctx)init(c,dest);if(!timer)run();},
     stop:function(){clearInterval(timer);timer=null;if(crk)crk.gain.value=0;},
@@ -299,9 +299,10 @@ var Snd=(function(){
     {id:'hookah',name:'Кальян булькає'},
     {id:'bell',name:'Дзвін у місті'},
     {id:'owl',name:'Сова вночі'},
-    {id:'horse',name:'Кінь пирхає'}
+    {id:'horse',name:'Кінь пирхає'},
+    {id:'vinyl',name:'Тріск платівки'}
   ];
-  var MULT={music:1,fire:1.1,rain:1,storm:1,city:.9,wind:.9,crickets:.7,purr:1.6,keys:.8,hookah:.9,bell:1,owl:.9,horse:1};
+  var MULT={music:1,fire:1.1,rain:1,storm:1,city:.9,wind:.9,crickets:.7,purr:1.6,keys:.8,hookah:.9,bell:1,owl:.9,horse:1,vinyl:.12};
   var st=load('pixeltv-sound',{}),i;
   for(i=0;i<DEFS.length;i++){var d=DEFS[i];if(!st[d.id])st[d.id]={on:false,vol:.6};}
   var ctx=null,master,white,brown,ch={},listeners={},hooks={};
@@ -323,7 +324,7 @@ var Snd=(function(){
   }
   function init(){
     var AC=window.AudioContext||window.webkitAudioContext;if(!AC)return false;
-    ctx=new AC();master=gain(.9);master.connect(ctx.destination);
+    ctx=new AC();master=gain(.9);var comp=ctx.createDynamicsCompressor?ctx.createDynamicsCompressor():null;if(comp){comp.threshold.value=-10;comp.ratio.value=6;master.connect(comp);comp.connect(ctx.destination);}else master.connect(ctx.destination);
     var n=ctx.sampleRate*2,k,last=0;
     white=ctx.createBuffer(1,n,ctx.sampleRate);var wd=white.getChannelData(0);for(k=0;k<n;k++)wd[k]=Math.random()*2-1;
     brown=ctx.createBuffer(1,n*2,ctx.sampleRate);var bd=brown.getChannelData(0);
@@ -340,6 +341,7 @@ var Snd=(function(){
     wind:function(o){var bp=flt('bandpass',500,.8),g=gain(.6);chain([loop(brown),bp,g,o]);
       var l1=ctx.createOscillator();l1.frequency.value=.09;chain([l1,gain(260),bp.frequency]);l1.start(0);
       var l2=ctx.createOscillator();l2.frequency.value=.045;chain([l2,gain(.35),g.gain]);l2.start(0);},
+    vinyl:function(o){var cb=ctx.createBuffer(1,ctx.sampleRate*2,ctx.sampleRate),cd=cb.getChannelData(0),k;for(k=0;k<cd.length;k++)cd[k]=Math.random()<.0006?(Math.random()*2-1):(Math.random()*2-1)*.012;chain([loop(cb),flt('highpass',900),gain(.6),o]);},
     purr:function(o){var g1=gain(.5),g2=gain(.6);chain([loop(brown),flt('lowpass',230),g1,g2,o]);
       var p=ctx.createOscillator();p.type='square';p.frequency.value=24;chain([p,gain(.5),g1.gain]);p.start(0);
       var br=ctx.createOscillator();br.frequency.value=.33;chain([br,gain(.4),g2.gain]);br.start(0);}
@@ -1020,9 +1022,9 @@ var Camp=(function(){
 
 var scenes=[
   {name:'Вечірня Вінниця',draw:City,preset:['city','wind']},
-  {name:'Вогнище в лісі',draw:Fire,preset:['fire','crickets','wind']},
+  {name:'Вогнище в лісі',draw:Fire,preset:['fire','crickets']},
   {name:'Мій стіл',draw:Room,preset:['music','rain','purr']},
-  {name:'Табір над Ратаєм',draw:Camp,preset:['fire','wind','crickets','bell','horse']}
+  {name:'Табір над Ратаєм',draw:Camp,preset:['fire','crickets','bell','horse']}
 ];
 var cur=load('pixeltv-scene',0);if(!(cur>=0&&cur<scenes.length))cur=0;
 var menuOpen=false;
@@ -1143,7 +1145,9 @@ function renderMenu(){
     }else html+='<div class="row wide'+fc+'" data-i="'+i+'"><span>'+(it.kind==='close'?'×':it.kind==='off'?'■':'▶')+'</span><span class="label">'+it.label+'</span></div>';
   }
   $('rows').innerHTML=html;
-  var f=$('rows').querySelector('.focus');if(f&&f.scrollIntoView)try{f.scrollIntoView({block:'nearest'});}catch(e){}
+  var f=$('rows').querySelector('.focus'),mb=document.querySelector('.menu');
+  if(f&&mb){if(focusIdx<=1)mb.scrollTop=0;else{var fr=f.getBoundingClientRect(),mr=mb.getBoundingClientRect();
+    if(fr.top<mr.top+12)mb.scrollTop-=mr.top+12-fr.top;else if(fr.bottom>mr.bottom-12)mb.scrollTop+=fr.bottom-(mr.bottom-12);}}
 }
 Stream.onChange(function(){if(menuOpen)renderMenu();});
 function activate(i){
