@@ -96,8 +96,9 @@ button.on{border-color:#ffcf6b;color:#ffcf6b}
       <button id="soundsBtn">♪ Звуки</button>
       <button id="clockBtn">Годинник: піксельний</button>
       <button id="lightBtn">Світло: авто</button>
+      <button id="yfBtn">Фільтр: вимк.</button>
       <button id="fs">На весь екран</button>
-      <span class="keys">Пульт: ◀ ▶ сцена · ▲ звуки · ▼ годинник · OK музика · червона — світло</span>
+      <span class="keys">Пульт: ◀ ▶ сцена · ▲ звуки · ▼ годинник · OK музика · червона — світло · жовта — фільтр</span>
     </div>
   </div>
 </div>
@@ -121,6 +122,10 @@ function save(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
 
 var weather={temp:-2,desc:'легкий сніг',precip:'snow',live:false};
 var fx={flash:0,puff:0,horse:0};
+/* yellow filter: compensates a blue-tinted TV panel by multiplying the picture with a warm colour */
+var YF=load('pixeltv-yfilter',{on:false,lvl:4});if(!(YF.lvl>=1&&YF.lvl<=10))YF.lvl=4;
+function yfColor(){return 'rgb(255,'+(255-YF.lvl*3)+','+(255-YF.lvl*13)+')';}
+function yfSave(){save('pixeltv-yfilter',YF);var el=document.getElementById('yfBtn');if(el)el.textContent='Фільтр: '+(YF.on?YF.lvl*10+'%':'вимк.');}
 
 /* =================== SKY: light follows the real sun over Vinnytsia =================== */
 var Sky=(function(){
@@ -1246,6 +1251,7 @@ function frame(ts){
     if(dt>.25)dt=.25;lastT=t;
     b.clearRect(0,0,W,H);
     var src=scenes[cur].draw(t,dt)||buf,sg=src===buf?b:src.getContext('2d'),SW=src.width,SH=src.height;
+    if(YF.on){sg.globalCompositeOperation='multiply';sg.fillStyle=yfColor();sg.fillRect(0,0,SW,SH);sg.globalCompositeOperation='source-over';}
     if(fx.flash>0){sg.globalAlpha=Math.min(1,fx.flash)*(Math.sin(t*40)>-.2?.55:.15);rect(sg,0,0,SW,SH,'#dfe6ff');sg.globalAlpha=1;fx.flash-=dt*2.2;}
     var sw=screen.width,sh=screen.height,s=Math.max(sw/SW,sh/SH),dw=SW*s,dh=SH*s;
     sctx.imageSmoothingEnabled=false;sctx.webkitImageSmoothingEnabled=false;
@@ -1322,6 +1328,8 @@ function menuItems(){
   a.push({kind:'group',label:'Атмосфера'});
   for(var i=1;i<Snd.defs.length;i++)a.push({kind:'ch',id:Snd.defs[i].id,label:Snd.defs[i].name});
   a.push({kind:'off',label:'Вимкнути всі звуки'});
+  a.push({kind:'group',label:'Екран'});
+  a.push({kind:'yf',label:'Жовтий фільтр (проти синяви)'});
   a.push({kind:'close',label:'Закрити'});
   return a;
 }
@@ -1335,6 +1343,10 @@ function renderMenu(){
       v=Snd.vol(it.id);m='';for(k=1;k<=10;k++)m+='<i class="'+(k<=Math.round(v*10)?'f':'')+'"></i>';
       html+='<div class="row'+(Snd.isOn(it.id)?' active':'')+fc+'" data-i="'+i+'"><span class="dot"></span><span class="label">'+it.label+'</span>'+
         '<span class="vol"><button data-d="-1" data-i="'+i+'" aria-label="Тихіше">−</button><span class="meter">'+m+'</span><button data-d="1" data-i="'+i+'" aria-label="Гучніше">+</button></span></div>';
+    }else if(it.kind==='yf'){
+      m='';for(k=1;k<=10;k++)m+='<i class="'+(k<=YF.lvl?'f':'')+'"></i>';
+      html+='<div class="row'+(YF.on?' active':'')+fc+'" data-i="'+i+'"><span class="dot"></span><span class="label">'+it.label+'</span>'+
+        '<span class="vol"><button data-d="-1" data-i="'+i+'" aria-label="Слабше">−</button><span class="meter">'+m+'</span><button data-d="1" data-i="'+i+'" aria-label="Сильніше">+</button></span></div>';
     }else if(it.kind==='station'){
       html+='<div class="row child'+fc+'" data-i="'+i+'"><span></span><span class="label">Стиль</span>'+
         '<span class="pick"><button data-p="-1" data-i="'+i+'" aria-label="Попередній стиль">◀</button><span>'+STATIONS[Music.station()].name+'</span><button data-p="1" data-i="'+i+'" aria-label="Наступний стиль">▶</button></span></div>';
@@ -1358,6 +1370,7 @@ function activate(i){
   else if(it.kind==='stream'){Snd.unlock();Stream.toggle();}
   else if(it.kind==='preset'){Stream.off();var p=scenes[cur].preset;for(var k=0;k<Snd.defs.length;k++){var id=Snd.defs[k].id;Snd.set(id,p.indexOf(id)>=0);}}
   else if(it.kind==='off'){Stream.off();for(var j=0;j<Snd.defs.length;j++)Snd.set(Snd.defs[j].id,false);}
+  else if(it.kind==='yf'){YF.on=!YF.on;yfSave();}
   else if(it.kind==='close'){openMenu(false);return;}
   renderMenu();
 }
@@ -1366,6 +1379,7 @@ function sideways(i,d){
   if(it.kind==='ch'){Snd.nudge(it.id,d*.1);if(!Snd.isOn(it.id)&&d>0)Snd.set(it.id,true);}
   else if(it.kind==='station')Music.setStation(Music.station()+d);
   else if(it.kind==='stream')Stream.move(d);
+  else if(it.kind==='yf'){YF.lvl=Math.max(1,Math.min(10,YF.lvl+d));if(d>0)YF.on=true;yfSave();}
   renderMenu();
 }
 function openMenu(o){menuOpen=o;$('menuwrap').hidden=!o;$('soundsBtn').className=o?'on':'';if(o){focusIdx=0;renderMenu();}}
@@ -1388,6 +1402,8 @@ $('clockBtn').addEventListener('click',function(){setClock(cstyle+1);wake();});
 var lightIdx=0;
 (function(){var names=['авто','ранок','день','захід','ніч'];for(var k=0;k<names.length;k++)if(names[k]===Sky.modeName())lightIdx=k;})();
 $('lightBtn').onclick=function(){lightIdx=(lightIdx+1)%5;Sky.setMode(lightIdx);lightLabel();wake();};
+function yfCycle(){if(!YF.on){YF.on=true;YF.lvl=2;}else if(YF.lvl>=10)YF.on=false;else YF.lvl=Math.min(10,YF.lvl+2);yfSave();if(menuOpen)renderMenu();}
+yfSave();$('yfBtn').onclick=function(){yfCycle();wake();};
 $('fs').addEventListener('click',function(){var el=document.documentElement;try{var p=(el.requestFullscreen||el.webkitRequestFullscreen).call(el);if(p&&p.catch)p.catch(function(){});}catch(e){}});
 document.addEventListener('mousemove',wake);
 document.addEventListener('pointerdown',function(){Snd.unlock();});
@@ -1403,6 +1419,7 @@ document.addEventListener('keydown',function(e){
     else return;
     e.preventDefault();return;
   }
+  if(k===405){yfCycle();e.preventDefault();return;}
   if(k===403){lightIdx=(lightIdx+1)%5;Sky.setMode(lightIdx);lightLabel();e.preventDefault();return;}
   if(k===404){setClock(cstyle+1);e.preventDefault();return;}
   if(k===406){openMenu(true);e.preventDefault();return;}
